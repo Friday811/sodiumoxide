@@ -66,8 +66,57 @@
 //! ```
 
 pub use self::scryptsalsa208sha256::*;
+use std::os::raw::c_ulonglong;
+use ffi;
+
 #[macro_use]
 mod argon2_macros;
 pub mod argon2i13;
 pub mod argon2id13;
 pub mod scryptsalsa208sha256;
+
+
+/// The `pwhash_salt()` returns a deterministically generated `HashedPassword` which
+/// includes:
+///
+/// - the result of a memory-hard, CPU-intensive hash function applied to the password
+///   `passwd`
+/// - the provided salt used for the
+///   previous computation
+/// - the other parameters required to verify the password: opslimit and memlimit
+///
+/// `OPSLIMIT_INTERACTIVE` and `MEMLIMIT_INTERACTIVE` are safe baseline
+/// values to use for `opslimit` and `memlimit`.
+///
+/// `alg` should be set to `crypto_pwhash_ALG_ARGONI13` or `crypto_pwhash_ALG_ARGONID13`.
+///
+/// The function returns `Ok(hashed_password)` on success and `Err(())` if it didn't complete
+/// successfully
+pub fn pwhash_salt(
+    passwd: &[u8],
+    salt: &[u8],
+    OpsLimit(opslimit): OpsLimit,
+    MemLimit(memlimit): MemLimit,
+    alg: i32,
+
+) -> Result<HashedPassword, ()> {
+    let mut hp = HashedPassword([0; HASHEDPASSWORDBYTES]);
+    if unsafe {
+        ffi::crypto_pwhash(
+            hp.0.as_mut_ptr() as *mut _,
+            HASHEDPASSWORDBYTES as c_ulonglong,
+            passwd.as_ptr() as *const _,
+            passwd.len() as c_ulonglong,
+            salt.as_ptr() as *const _,
+            opslimit as c_ulonglong,
+            memlimit,
+            alg,
+        )
+    } == 0
+    {
+        Ok(hp)
+    } else {
+        Err(())
+    }
+}
+
